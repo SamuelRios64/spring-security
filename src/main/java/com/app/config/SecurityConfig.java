@@ -1,5 +1,7 @@
 package com.app.config;
 
+import com.app.config.filter.JwtTokenValidator;
+import com.app.utils.JwtUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,6 +23,8 @@ import org.springframework.security.crypto.password.NoOpPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,11 +33,14 @@ import java.util.List;
 @EnableMethodSecurity // Permite usar anotaciones como @PreAuthorize o @Secured para proteger métodos
 public class SecurityConfig {
 
+    @Autowired
+    private JwtUtils jwtUtils;
+
     // Configura la cadena de filtros de seguridad (security filter chain)
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity httpSecurity) throws Exception {
 
-        return httpSecurity
+        /*return httpSecurity
                 // Desactiva CSRF (protección contra ataques Cross-Site Request Forgery)
                 .csrf(csrf -> csrf.disable())
 
@@ -44,8 +51,35 @@ public class SecurityConfig {
                 // Útil para APIs que usan tokens como JWT
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
+                // Primero se ejecuta el filtro del token que el otro
+                .addFilterBefore( new JwtTokenValidator(jwtUtils), BasicAuthenticationFilter.class)
                 // Aquí podrías definir reglas de autorización si lo deseas
+                .build();*/
+
+        return httpSecurity
+                // Desactiva CSRF (protección contra ataques Cross-Site Request Forgery)
+                .csrf(csrf -> csrf.disable())
+                // Usa autenticación HTTP básica (usuario y contraseña en el encabezado Authorization)
+                .httpBasic(Customizer.withDefaults())
+                // Define que la aplicación no mantendrá sesiones de usuario (stateless)
+                // Útil para APIs que usan tokens como JWT
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(http -> {
+                    // Configurar los endpoints publicos
+
+                    // Todos los endpoints que tienen /auth deben ser publicos
+                    http.requestMatchers(HttpMethod.POST, "/auth/**").permitAll();
+
+                    // Configurar endpoints privados
+                    http.requestMatchers(HttpMethod.POST, "/method/post").hasAnyRole("ADMIN", "DEVELOPER");
+
+                    http.requestMatchers(HttpMethod.PATCH, "/method/patch").hasAuthority("REFACTOR");
+
+                    http.requestMatchers(HttpMethod.GET, "method/get").hasAuthority("READ");
+
+                    http.anyRequest().denyAll();
+                })
+                .addFilterBefore(new JwtTokenValidator(jwtUtils), BasicAuthenticationFilter.class)
                 .build();
     }
 

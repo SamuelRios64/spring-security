@@ -1,13 +1,21 @@
 package com.app.services;
 
+import com.app.controllers.dto.AuthLoginRequest;
+import com.app.controllers.dto.AuthResponse;
 import com.app.entities.UserEntity;
 import com.app.repositories.UserEntityRepository;
+import com.app.utils.JwtUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,8 +29,14 @@ import java.util.List;
 @Service // Marca esta clase como un componente de servicio en Spring (se detecta automáticamente como bean)
 public class UserDetailService implements UserDetailsService {
 
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @Autowired // Inyecta automáticamente el repositorio de usuarios
     private UserEntityRepository userRepository;
+
+    @Autowired
+    private JwtUtils jwtUtils;
 
     /**
      * Este método se ejecuta automáticamente por Spring Security cuando alguien intenta iniciar sesión.
@@ -68,5 +82,46 @@ public class UserDetailService implements UserDetailsService {
                 user.getAccountNoExpired(),
                 authorities
         );
+    }
+
+    // Generamos el token de acceso
+    public AuthResponse loginUser(AuthLoginRequest authLoginRequest){
+
+        // Recuperamos el usuario y la contraseña
+        String username = authLoginRequest.username();
+        String password = authLoginRequest.password();
+
+        // Se encarga de que la credenciales sean correctas
+        Authentication authentication = this.authenticate(username, password);
+
+        // Se agrega al Security Context Holder
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        String accessToken = jwtUtils.createToken(authentication);
+
+        AuthResponse authResponse = new AuthResponse(username, "User loged successfuly", accessToken, true);
+
+        return authResponse;
+
+    }
+
+    // Metodo que nos permite buscar el usaurio en la base de datos y verificar de que las credenciales sean correctas
+    public Authentication authenticate(String username, String password){
+        // Buscamos el usuario en la base de datos
+        UserDetails userDetails = this.loadUserByUsername(username);
+
+        if (userDetails == null){
+            throw new BadCredentialsException("Invalid username or password");
+        }
+
+        // Si son diferentes, votamos un error
+        if (!passwordEncoder.matches(password, userDetails.getPassword())){
+            throw new BadCredentialsException("Invalid password");
+        }
+        // Objeto de autenticacion
+        return new UsernamePasswordAuthenticationToken(
+                username,
+                userDetails.getPassword(),
+                userDetails.getAuthorities());
     }
 }
