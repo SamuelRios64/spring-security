@@ -1,5 +1,7 @@
 package com.app.controllers;
 
+import com.app.controllers.dto.AuthCreateUserRequest;
+import com.app.controllers.dto.AuthCreateUserRequest;
 import com.app.controllers.dto.AuthLoginRequest;
 import com.app.controllers.dto.AuthResponse;
 import com.app.services.UserDetailService;
@@ -18,6 +20,12 @@ public class AuthenticationController {
 
     @Autowired
     UserDetailService userDetailService;
+
+    // Endpoint para que un usuario se puede registrar en la aplicación
+    @PostMapping("/sign-up")
+    public ResponseEntity<AuthResponse> register(@RequestBody @Valid AuthCreateUserRequest authCreateUser){
+        return new ResponseEntity<>(this.userDetailService.createUser(authCreateUser), HttpStatus.CREATED);
+    }
 
     @PostMapping("/log-in")
     public ResponseEntity<AuthResponse> login(@RequestBody @Valid AuthLoginRequest userRequest){

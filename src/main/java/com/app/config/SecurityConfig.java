@@ -76,7 +76,6 @@ public class SecurityConfig {
                     http.requestMatchers(HttpMethod.PATCH, "/method/patch").hasAuthority("REFACTOR");
 
                     http.requestMatchers(HttpMethod.GET, "method/get").hasAuthority("READ");
-
                     http.anyRequest().denyAll();
                 })
                 .addFilterBefore(new JwtTokenValidator(jwtUtils), BasicAuthenticationFilter.class)

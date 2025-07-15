@@ -1,8 +1,11 @@
 package com.app.services;
 
+import com.app.controllers.dto.AuthCreateUserRequest;
 import com.app.controllers.dto.AuthLoginRequest;
 import com.app.controllers.dto.AuthResponse;
+import com.app.entities.RoleEntity;
 import com.app.entities.UserEntity;
+import com.app.repositories.RoleEntityRepository;
 import com.app.repositories.UserEntityRepository;
 import com.app.utils.JwtUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -10,6 +13,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -19,6 +23,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /*
 * Este servicio es clave para la autenticación en Spring Security.
@@ -34,6 +40,9 @@ public class UserDetailService implements UserDetailsService {
 
     @Autowired // Inyecta automáticamente el repositorio de usuarios
     private UserEntityRepository userRepository;
+
+    @Autowired
+    private RoleEntityRepository roleEntityRepository;
 
     @Autowired
     private JwtUtils jwtUtils;
@@ -124,4 +133,66 @@ public class UserDetailService implements UserDetailsService {
                 userDetails.getPassword(),
                 userDetails.getAuthorities());
     }
+
+    // Método que nos permite crear un usuario en el sistema
+    public AuthResponse createUser(AuthCreateUserRequest authCreateUserRequest){
+
+        // Extraemos el usuario
+        String username = authCreateUserRequest.username();
+
+        // Extraemos la contraseña
+        String password = authCreateUserRequest.password();
+
+        // Necesitamos extraer la lista de roles
+        List<String> roleRequest = authCreateUserRequest.roleRequest().roleListName();
+
+        // Me trae los roles que coincidan con los que el usuario va a  tener
+        Set<RoleEntity> roleEntitySet = roleEntityRepository.findRoleEntitiesByRoleEnumIn(roleRequest).stream().collect(Collectors.toSet());
+
+        if (roleEntitySet.isEmpty()) {
+            throw new IllegalArgumentException("The roles specified does not exists.");
+        }
+
+        // Construir el usuario
+        UserEntity userEntity = UserEntity.builder()
+                .username(username)
+                .password(passwordEncoder.encode(password))
+                .roles(roleEntitySet)
+                .isEnabled(true)
+                .accountNoLocked(true)
+                .accountNoExpired(true)
+                .credentialNoExpired(true)
+                .build();
+        
+        // Guardamos en la base de datos
+        UserEntity userCreated = userRepository.save(userEntity);
+        
+        // Generamos el token
+
+        // Lista de los permisos que va a tener
+        List<SimpleGrantedAuthority> authorityList = new ArrayList<>();
+
+        // Obtenemos cada rol y los metemos a la lista de arriba
+        userCreated.getRoles().forEach(role -> authorityList.add(new SimpleGrantedAuthority("ROLE_".concat(role.getRoleEnum().name()))));
+
+        // Obtenemos cada uno de los permisos de cada rol y tambien los añadimos al array de arriba
+        userCreated.getRoles()
+                .stream()
+                .flatMap(role -> role.getPermissionList().stream())
+                .forEach(permission -> authorityList.add(new SimpleGrantedAuthority(permission.getName())));
+
+
+        SecurityContext context = SecurityContextHolder.getContext();
+
+        // Objeto de autenticacion
+        Authentication authentication = new UsernamePasswordAuthenticationToken(userCreated.getUsername(), userCreated.getPassword(), authorityList);
+
+        String accessToken = jwtUtils.createToken(authentication);
+
+        AuthResponse authResponse = new AuthResponse(userCreated.getUsername(), "User created successfully", accessToken, true);
+
+        return authResponse;
+    }
+
+
 }
